@@ -17,11 +17,18 @@ library("sf")
 library("janitor")
 library("httr")
 
+### Never change/update the values below:
+report_ids = c(2918, 2986, 3222, 2917, 3602, 3317, 3315, 3314, 3612, 3513,# addendum
+               3615, 3527, 3614,                                          # artisanal
+               3605, 2953, 3608, 3619)                                    # Part1
+
+report_ids_ikasavea = c("b1559368-b7a3-464e-883a-34fe3d2cd7c0") 
+
 # baseurl ikasavea
 baseurl_ika="https://www.spc.int/coastalfisheries/"
 
 get_all_country_codes <- function(x){
-  res <- c("VU" ,"CK", "FJ", "FM", "KI", "MH", "NC", "NR", "NU", "PF", "PG", "PW", "SB", "TK", "TO", "TV")
+  res <- c("VU" ,"CK", "FJ", "FM", "KI", "MH", "NC", "NR", "NU", "PF", "PG", "PW", "SB", "TK", "TO", "TV", "WS")
   return(res)
 }
 
@@ -87,8 +94,6 @@ download_ikasavea_data <- function(country_code, report_ids, folder_path, r_year
       
       if (report_id == "b1559368-b7a3-464e-883a-34fe3d2cd7c0") {
         report_name <- "trips_landing_site"
-      } else if (report_id == "91a1cb61-8436-49aa-a552-512f0362f403") {
-        report_name <- "catch_by_fishing_event"
       } else {
         report_name <- report_id
       }
@@ -97,7 +102,7 @@ download_ikasavea_data <- function(country_code, report_ids, folder_path, r_year
       write.csv(df_result, file = filename_csv, row.names = FALSE)
 
     } else {
-      cat(paste0("⚠️ IKASAVEA: No 'data' field found in response for report", report_id,, "year ", r_year, "\n"))
+      cat(paste0("⚠️ IKASAVEA: No 'data' field found in response for report", report_id, "year ", r_year, "\n"))
     }
   }
 }
@@ -651,7 +656,7 @@ build_reports <- function(country_codes,
       
       # Render the document with parameters
       quarto_render(
-        input = "template_part1_test.qmd",
+        input = "template_part1.qmd",
         execute_params = params_part1,
         output_file = output_filename_part1
       )
@@ -679,7 +684,7 @@ build_reports <- function(country_codes,
         
       # Render the document with parameters
       quarto_render(
-        input = "template_addendum_test.qmd",
+        input = "template_addendum.qmd",
         execute_params = params_addendum,
         output_file = output_filename_addendum
       )
@@ -705,7 +710,7 @@ build_reports <- function(country_codes,
       
       # Render the document with parameters
       quarto_render(
-        input = "template_artisanal_test.qmd",
+        input = "template_artisanal.qmd",
         execute_params = params_art,
         output_file = output_filename_art
       )

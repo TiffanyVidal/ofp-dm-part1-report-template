@@ -36,14 +36,11 @@ this_yr_folder = paste0("./data/report_", as.character(report_year), "_", tolowe
 # Define years to use for tables and figures
 yrs_long <- (params$year-4):params$year
 yr_range <- paste(min(yrs_long),max(yrs_long), sep="-")
-
-source("utils.R")
 '%nin%' = function(x,y) !x %in% y            
 
 ```
 
 ```{r data-prep}
-
 # Load all raw data - from t2
 data_3615 <- read_and_clean(this_yr_folder, country_cd, r_code = 3615) |>
       mutate(across(where(is.character), tolower))
@@ -55,19 +52,24 @@ data_3614 <- read_and_clean(this_yr_folder, country_cd, r_code = 3614)|>
       mutate(across(where(is.character), tolower))
 
 ika_trips_file = paste0(this_yr_folder, "ikasavea/", country_cd, "_trips_landing_site.csv")
+
 if (file.exists(ika_trips_file)){
-  data_ika_trips <- read.csv(paste0(this_yr_folder, "ikasavea/", country_cd, "_trips_landing_site.csv"))
+  data_ika_raw <- read.csv(paste0(this_yr_folder, "ikasavea/", country_cd, "_trips_landing_site.csv"))
 }
-if (nrow(data_ika_trips) == 0 && nrow(data_3615) == 0) {
+if (nrow(data_ika_raw) == 0 && nrow(data_3615) == 0) {
   cat("No Ikasavea trip data found for this country/year. Document generation stopped.\n")
   knitr::knit_exit()
 }
 
-if (nrow(data_ika_trips) > 0){
-   data_ika_trips <- data_ika_trips|>
+if (nrow(data_ika_raw) > 0){
+  
+  data_ika_raw <- data_ika_raw|>
+    rename(landing_site_name = LandingSite)
+  
+   data_ika_trips <- data_ika_raw |>
     mutate(across(where(is.character), tolower)) |>
     janitor::clean_names() |>
-    select(landing_site_name = landing_site, month,
+    select(landing_site_name, month,
            number_trips)
   
   df_ika_wide <- data_ika_trips %>%
@@ -75,35 +77,57 @@ if (nrow(data_ika_trips) > 0){
     mutate(month = month.abb[month]) %>%
     pivot_wider(names_from = month, values_from = number_trips) %>%
     select(landing_site_name, all_of(month.abb))
+  
+  data_ika_catch_kg <- data_ika_raw |>
+    mutate(across(where(is.character), tolower)) |>
+    janitor::clean_names() |>
+    select(landing_site_name, month, skj = skj_kg, yft = yft_kg, bet = bet_kg)#, alb = alb_kg)
+  
+  data_ika_catch_kg <- data_ika_catch_kg |>
+    pivot_longer(cols = c("skj", "bet", "yft"), names_to = "sp_code", values_to = "sp_kg")
+  
   }
 
+both_exist <- nrow(data_ika_trips) > 0 && exists('data_3615') && 
+              is.data.frame(get('data_3615')) && nrow(data_3615) > 0
 ```
 
 ::: panel-tabset
 
 ## Methodology
 
-The steps for preparing the artisanal catch estimates for key tuna species are outlined below, with the following tabs showing the catch and effort estimates that are used to prepare the final catch estimates. It should be noted that the Tails (and moving forward, Ikasavea) app captures a sample of the artisanal fishing activity. At this point, we do not have comprehensive surveys in place to scale up those estimates in a reliable and representative manner. Therefore, we are basing these estimates on a combination of reporting catch and effort as well as local expert knowledge of the activities at different landing sites.
+The steps for preparing the artisanal catch estimates (ACE) for key tuna species are outlined below. The following tabs showing the catch and effort estimates that are used to prepare the final catch estimates. 
 
-In the future, we hope to progress the Frame Survey concept to being to refine the estimates of total effort that are used to scale up the sampled catch estimates reported in the respective applications.
+It should be noted that the Tails and Ikasavea apps are separate applications collecting a sample of the artisanal fishing activity. Some members only use Ikasavea, others use only Tails and some use both. At this point, we do not have comprehensive surveys in place to scale up how much of the fishing activity is recorded using these ereporting platforms in a reliable and representative manner. Therefore, we are basing the ACE estimates presented here on a combination of reporting catch and effort from these two sources (in case data is stored in both sources we will combine their effort and catch values) as well as local expert knowledge of the activities at different landing sites.
 
-1.  We provide a summary of number of trips by month and landing site from the TAILS trip and activity logs
-2.  We compare to "rough" estimates of average monthly landings (trips) per month and landing site \[used if activity log data is unreliable/incomplete\]
-3.  The tuna catch by landings site and month is calculated
-4.  We then multiply the monthly CPUE (catch/trip) by the estimated number of trips, and if those data are missing, we use an average CPUE multiplied by the number of trips
-5.  The artisanal ACE is the sum across all months and landing sites
+In the future, we hope to progress the Frame Survey concept to refine the estimates of total effort that are used to scale up the sampled catch estimates reported in the respective applications.
 
-Please also note that until this point, Iksavea and Tails are separate applications collecting data in separate places. Therefore, please review the Iksavea data (SPC can provide) and the T2 report (#3095) for other species that may be have been reported to supplement this assessment of key tuna catches.
+
+**1.**  We provide a summary of number of trips by month and landing site recorded in Tails (if any)
+
+**2.**  We provide a summary of number of trips by month and landing site recorded in Ikasavea (if any)
+
+**3.**  If available data is collected using Ikasavea and TAILS we combine (sum) those values to provide final number of trips based on ereporting platforms
+
+**4.**  We compare to "rough" estimates of average monthly landings (trips) per month and landing site provided by members
+
+**5.**  The tuna catch by landings site and month is calculated (if data is available in Tails and Ikasavea we combine the data, ie: we sum the catches recorded on these two tools)
+
+**6.**  We then multiply the monthly CPUE (catch/trip) by the estimated number of trips, and if those data are missing, we use an average CPUE multiplied by the number of trips
+
+**7.**  The artisanal ACE is the sum across all months and landing sites
 
 ## Fishing Effort
 
 ### Data prep: Effort
 
-Below is a summary of the number of reported **trips** in `r params$year` by month and landing site, as reported in Tails. This table compares both fishing days and trips reported (using the number of motor and paddle vessel trips reported), and takes the maximum value as an estimate of trips.
+The tables below present the number of reported **trips** in `r params$year` by month and landing site, as reported in Tails, Ikasavea and in both platforms together (in case you have data reported in these two sources).
+
+If member provided a spreadsheet with the estimated trips per month at each landing site this will also be presented below. Some landing sites may not have any activity, that is OK. The member-provided estimates of effort by landing site and compared with the Tails (or Ikasavea or both sources combined) reported effort to produce a 'best' estimate of effort.
 
 <details>
 
-<summary>Reported Trips - TAILS</summary>
+<summary> Trips: Tails</summary>
 
 ```{r}
 #| echo: false
@@ -112,13 +136,13 @@ Below is a summary of the number of reported **trips** in `r params$year` by mon
 #| tbl-cap: !expr if(nrow(data_3615) > 0) glue::glue("Number of trips per month and landing site reported in Tails") else ""
 
 # Check if data exists
-if (nrow(data_3615) == 0) {
-  return(invisible(NULL))
-}else{
+if (!(nrow(data_3615) == 0)) {
   data_3615 <-  data_3615 |> select(-entity)
   flextable(data_3615) |>  
   width(j=1, width=1.2) |> 
   fontsize(size = 10, part = "all")
+}else{
+  cat("No fishing trips recorded in Tails for the selected year.")
 }
 ```
 
@@ -126,42 +150,39 @@ if (nrow(data_3615) == 0) {
 
 <details>
 
-<summary>Reported Trips - IKASAVEA</summary>
+<summary> Trips: Ikasavea</summary>
 
-If you have any artisanal data recorded in Ikasavea you see a table below with the number of trips per month.
 
 ```{r}
 #| echo: false
 #| results: 'asis'
-#| label: tab2
-#| tbl-cap: !expr if(nrow(data_ika_trips) == 0) glue::glue("Fishing trips reported in Ikasavea") else ""
-
+#| label: Monthly-effort-ika
+#| tbl-cap: !expr if(nrow(data_ika_trips) == 0) glue::glue("Number of trips per month and landing site reported in Ikasavea") else ""
 if (nrow(data_ika_trips) == 0){
-  return(invisible(NULL))
+  cat("No fishing trips recorded in Ikasavea for the selected year.")
 }else{
   flextable(df_ika_wide) |>  
   width(j=1, width=1.2) |> 
   fontsize(size = 10, part = "all")
-}
+  }
 ```
 </details>
 
 <details>
 
-<summary>Differences in Landing Sites </summary>
+<summary>Differences in Landing Sites: Ikasavea + Tails</summary>
 
-Below is a summary of all landing sites common to T2 and Ikasavea as well the ones unique to each of these sources (if any). Use this section to identify issues in landing site names between these two sources.
-
-If no table is presented below it means you have artisanal data coming from a single source (Ikasavea OR Tails).
+If you have artisanal data being collected in Tails and in Ikasavea, you will see a summary table below of all landing sites common to T2 and Ikasavea as well the ones unique to each of these sources (if any). Use this section to identify issues in landing site names between these two sources.
 
 ```{r}
 #| echo: false
+#| eval: !expr both_exist
 #| results: 'asis'
 #| label: diff_t2_ika
 #| tbl-cap: !expr if(nrow(data_ika_trips) == 0) glue::glue("Fishing trips reported in Ikasavea") else ""
 
-if (nrow(data_ika_trips) > 0 && exists('data_3615') && is.data.frame(get('data_3615'))) {
-  
+if (both_exist) {
+
   ls_t2  <- tolower(trimws(unique(data_3615$landing_site_name)))
   ls_ika <- tolower(trimws(unique(df_ika_wide$landing_site_name)))
   
@@ -202,24 +223,24 @@ if (nrow(data_ika_trips) > 0 && exists('data_3615') && is.data.frame(get('data_3
     }
   }
 }
+
 ```
 
 </details>
 
 <details>
 
-<summary> Trips: IKASAVEA + TAILS </summary>
+<summary>Trips: Ikasavea + Tails</summary>
 
-Below is result of the total number of trips considering both source (Tails and Ikasavea, in case you have data
-coming from these two sources).
+If you have data being collected through these two ereporting tools you will see the final number of trips considering what was reported on both.
 
 ```{r}
 #| echo: false
 #| results: 'asis'
+#| label: tails_ika_summary
 
-
-if (nrow(data_ika_trips) > 0 && exists('data_3615') && is.data.frame(get('data_3615'))) {
-
+# ika and tails combined
+if (both_exist) {
   prep <- function(df) {
     df %>%
       mutate(landing_site_name = tolower(trimws(landing_site_name))) %>%
@@ -228,28 +249,29 @@ if (nrow(data_ika_trips) > 0 && exists('data_3615') && is.data.frame(get('data_3
   }
   
   combined_t2_ika <- bind_rows(prep(data_3615), prep(df_ika_wide)) %>%
-  group_by(landing_site_name, month) %>%
-  summarise(trips = sum(trips), .groups = "drop") %>%
-  mutate(month = factor(month, levels = tolower(month.abb))) %>%
-  pivot_wider(names_from = month, values_from = trips) %>%
-  arrange(landing_site_name) |>
-  select(landing_site_name, tolower(month.abb))
+    group_by(landing_site_name, month) %>%
+    summarise(trips = sum(trips), .groups = "drop") %>%
+    mutate(month = factor(month, levels = tolower(month.abb))) %>%
+    pivot_wider(names_from = month, values_from = trips) %>%
+    arrange(landing_site_name) |>
+    select(landing_site_name, tolower(month.abb))
+  
+  ft <- flextable(combined_t2_ika) |>  
+    width(j=1, width=1.2) |> 
+    fontsize(size = 10, part = "all")
+  
+  flextable::htmltools_value(ft)
 
-  flextable(combined_t2_ika) |>  
-  width(j=1, width=1.2) |> 
-  fontsize(size = 10, part = "all")
-}else{
-  combined_t2_ika <- data.frame
-  }
+} else {
+  combined_t2_ika <- data.frame()
+}
 ```
-
-</details>
 
 </details>
 
 <details>
 
-<summary>Local Knowledge - Trips</summary>
+<summary>Trips: Local Knowledge</summary>
 
 Read in member-estimated **trips** per month at each landing site. Some landing sites may not have any activity, that is OK. The member-provided estimates of effort by landing site and compared with the Tails reported effort to produce a 'best' estimate of effort.
 
@@ -259,93 +281,97 @@ Read in member-estimated **trips** per month at each landing site. Some landing 
 #| label: mem-trips
 #| tbl-cap: !expr if(nrow(data_3615) > 0) glue::glue("Member reported estimated trips per month per landing site") else ""
 
-est_trips_file <-  str_c(this_yr_folder,  'additional_files/est_trips.csv')
+local_knowl_trips_file <-  str_c(this_yr_folder,  'additional_files/est_trips.csv')
 
-if (file.exists(est_trips_file)){
-  est_trips = read.csv(est_trips_file) 
-  flextable(est_trips)  |>  
+if (file.exists(local_knowl_trips_file)){
+  local_knowl_trips = read.csv(local_knowl_trips_file)
+  flextable(local_knowl_trips)  |>  
     fontsize(size = 10, part = "all") |> 
     width(j=1, width=2)
-}else{
-  #pass
 }
 
 ```
 
 </details>
 
-Below is a summary of the number of reported **days** in `r params$year` by month and landing site, as reported in Tails. This is used to estimate the number of trips per day.
-
 ### Best estimate of fishing trips
 
-Now estimate monthly trips, based on the max value either reported by the member or reported in Tails and Ikasavea. In case you have data in Tails and Ikasavea the combination of trips in both sources will be used (tab above).
+Now estimate monthly trips, based on the **max** *value either reported by the member or reported in the ereporting tools Tails and Ikasavea*. In case the er have data in Tails and Ikasavea the combination of trips in both sources will be used as your best estimate monthly trips (tab above).
 
-```{r, echo = F}
-#TODO: choose which df to use, combined, TAils or ikasavea
+```{r prep-ereporting_trips, echo = F}
 
-if (nrow(combined_t2_ika)>0){
-  combined <- combined_t2_ika |>
+# check logic to be applied for ereporting: tails, ikasavea or tails + ikasavea?
+
+if (nrow(combined_t2_ika)>0){ # it means tails + ikasavea
+  
+  ereporting_trips <- combined_t2_ika |>
+  mutate(landing_site_name = str_squish(landing_site_name))
+  ereporting_trips_tag <- c("Trips: Ikasavea + Tails")
+  
+  }else if (nrow(data_ika_trips) == 0 && nrow(data_3615) > 0){ # so it means you only have tails
+    ereporting_trips <- data_3615|>
     mutate(landing_site_name = str_squish(landing_site_name))
-  combined_tag <- c("Trips: IKASAVEA + TAILS")
-}else if (nrow(data_ika_trips) == 0 && nrow(data_3615) > 0){
-  combined <- data_3615|>
-    mutate(landing_site_name = str_squish(landing_site_name))
-  combined_tag <- c("Trips: TAILS")
-}else if(nrow(data_3615) == 0 && nrow(data_ika_trips) > 0){
-  combined <- data_ika_trips|>
-    mutate(landing_site_name = str_squish(landing_site_name))
-  combined_tag <- c("Trips: IKASAVEA")
-}else{
-  combined <- data.frame()
-  combined_tag <- c("")
-}
+    ereporting_trips_tag <- c("Trips: Tails")
+      
+  }else if(nrow(data_3615) == 0 && nrow(data_ika_trips) > 0){ # it means you only have ikasavea 
+    ereporting_trips <- df_ika_wide 
+    ereporting_trips_tag <- c("Trips: Ikasavea")
+  }else{
+    ereporting_trips <- data.frame()
+    ereporting_trips_tag <- c("")
+  }
 ```
 
 ```{r max.trips}
 #| echo: false
 #| results: 'asis'
 #| label: est-trips-monthly
-#| tbl-cap: !expr if(nrow(combined) > 0) glue::glue("Best estimate of trips per month at each landing site") else ""
+#| tbl-cap: !expr if(nrow(ereporting_trips) > 0) glue::glue("Best estimate of trips per month at each landing site") else ""
  
-# Formerly Table 8 in old Excel
-
-if (nrow(combined) > 0){
-  if (file.exists(est_trips_file)){
-    if (!all(c("landing_site_name", "est.trips") %in% colnames(est_trips))) {
+if (nrow(ereporting_trips) > 0){
+  
+  if (file.exists(local_knowl_trips_file)){
+    
+    # check if columns are correct, if not, flag the issue
+    if (!all(c("landing_site_name", "est.trips") %in% colnames(local_knowl_trips))) {
       cat("Your estimated trip file has to have the following columns: 'landing_site_name', 'est.trips'")
-      tab8 <- combined
+      best_estimate_trips <- ereporting_trips
+        
     }else{
       
-      # groom est_trips
-      est_trips <- est_trips |>
+      # if all columns are in the df, groom local_knowl_trips and produce best_estimate_trips
+      local_knowl_trips <- local_knowl_trips |>
         mutate(across(where(is.character), tolower)) |>
         mutate(landing_site_name = str_squish(landing_site_name))
 
-      tab8 = combined |> full_join(est_trips |> select(landing_site_name, est.trips))
-      tab8[is.na(tab8)] <- 0
-      tab8 <- data.frame(tab8)
+      best_estimate_trips = ereporting_trips |> 
+        full_join(local_knowl_trips |> 
+                    select(landing_site_name, est.trips))
+      
+      best_estimate_trips[is.na(best_estimate_trips)] <- 0
+      best_estimate_trips <- data.frame(best_estimate_trips)
       for( i in 2:13){
-        tab8[ ,i] = ifelse( tab8[ ,i] >  tab8[ ,14] ,  tab8[ ,i] , tab8[ ,14] )
+        best_estimate_trips[ ,i] = ifelse( best_estimate_trips[ ,i] > best_estimate_trips[ ,14],  
+                                           best_estimate_trips[ ,i] , best_estimate_trips[ ,14] )
         }
 
       # Get rid of sites that only have NAs
-      tab8$num_na_cols <- rowSums(tab8[, 2:13] )
+      best_estimate_trips$num_na_cols <- rowSums(best_estimate_trips[, 2:13] )
 
-      tab8 <- tab8 |>  filter(num_na_cols>0) |>
+      best_estimate_trips <- best_estimate_trips |>  filter(num_na_cols>0) |>
         select(-c(est.trips, num_na_cols))
-
-      # Now check for site with days but no trips -- just in case
-      # tab8 <- tab8 |> rbind(tab2 |>  filter(landing_site_name %nin% tab8$landing_site_name))
-
-      flextable(tab8)  |>  fontsize(size = 8, part = "all")
-
-          }
-  }
+    }
+    }
   else{
-    cat(paste0("There is no member-estimated trips available, so the best estimate fishing is the table above: ", combined_tag))
-    tab8 <- combined
+    cat(paste0("There is no member-estimated trips available, so the best estimate fishing is the table above: <b>", ereporting_trips_tag,
+             "</b>"))    
+    best_estimate_trips <- ereporting_trips
   }
   }
+
+flextable(best_estimate_trips)  |>  
+  fontsize(size = 8, part = "all")
+
 
 ```
 
@@ -353,7 +379,7 @@ if (nrow(combined) > 0){
 
 ### Data prep: Catch
 
-```{r}
+```{r prep-catch-data}
 # ── Month number → abbreviated name (keeps columns in calendar order) ─────────
 month_labels <- c("Jan","Feb","Mar","Apr","May","Jun",
                   "Jul","Aug","Sep","Oct","Nov","Dec")
@@ -382,10 +408,42 @@ make_wide <- function(data) {
     select(landing_site_name, any_of(month_labels))
 }
 
+# helper to combine ika and tails
+combine_wide <- function(df1, df2) {
+  if (is.null(df1) && is.null(df2)) return(NULL)
+  
+  month_cols <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+  
+  drop_zero_rows <- function(df) {
+    if (is.null(df)) return(NULL)
+    df |> filter(if_any(all_of(month_cols), ~ . != 0))
+  }
+  
+  df1 <- drop_zero_rows(df1)
+  df2 <- drop_zero_rows(df2)
+  
+  if (is.null(df1) || nrow(df1) == 0) return(df2)
+  if (is.null(df2) || nrow(df2) == 0) return(df1)
+  
+  full_join(df1, df2, by = "landing_site_name", suffix = c("_a", "_b")) |>
+    mutate(across(all_of(paste0(month_cols, "_a")), 
+                  ~ coalesce(., 0L))) |>
+    mutate(across(all_of(paste0(month_cols, "_b")), 
+                  ~ coalesce(., 0L))) |>
+    mutate(Jan = Jan_a + Jan_b, Feb = Feb_a + Feb_b,
+           Mar = Mar_a + Mar_b, Apr = Apr_a + Apr_b,
+           May = May_a + May_b, Jun = Jun_a + Jun_b,
+           Jul = Jul_a + Jul_b, Aug = Aug_a + Aug_b,
+           Sep = Sep_a + Sep_b, Oct = Oct_a + Oct_b,
+           Nov = Nov_a + Nov_b, Dec = Dec_a + Dec_b) |>
+    select(landing_site_name, all_of(month_cols))
+}
 
-# Check if data exists - if yes, reshape and create a df per sp
+# Check if tails data exists - if yes, reshape and create a df per sp
 if (nrow(data_3614) > 0) {
-  df_by_species <- data_3614 %>%
+  df_by_species <- data_3614 |>
+    mutate(landing_site_name = str_squish(landing_site_name)) |>
     group_by(sp_code) %>%
     group_map(~ make_wide(.x), .keep = FALSE) %>%
     setNames(sort(unique(data_3614$sp_code))) 
@@ -393,12 +451,110 @@ if (nrow(data_3614) > 0) {
   df_bet <- df_by_species[["bet"]]
   df_skj <- df_by_species[["skj"]]
   df_yft <- df_by_species[["yft"]]
+}
+
+# Check if ika data exists - if yeas, reshape and create a df per sp
+if(exists('data_ika_catch_kg') && is.data.frame(get('data_ika_catch_kg'))){
+  
+  df_by_species_ika <- data_ika_catch_kg %>%
+    mutate(landing_site_name = str_squish(landing_site_name)) |>
+
+    group_by(sp_code) %>%
+    group_map(~ make_wide(.x), .keep = FALSE) %>%
+    setNames(sort(unique(data_ika_catch_kg$sp_code))) 
+  
+  df_bet_ika <- df_by_species_ika[["bet"]]
+  df_skj_ika <- df_by_species_ika[["skj"]]
+  df_yft_ika <- df_by_species_ika[["yft"]]
+  
+  
+  # If required (if ika and tails exist), combine catch values from both sources
+  if (nrow(data_3614) > 0){
+    df_bet_total <- combine_wide(df_bet, df_bet_ika)
+    df_skj_total <- combine_wide(df_skj, df_skj_ika)
+    df_yft_total <- combine_wide(df_yft, df_yft_ika)
+  } else{
+    # Just use the ika source if t2 data doesn't exist
+    df_bet_total <- df_bet_ika
+    df_skj_total <- df_skj_ika
+    df_yft_total <- df_yft_ika
+    
   }
-# df_by_species[["YFT"]]   # yellowfin tuna only
-# df_by_species[["SKJ"]]   # skipjack tuna only
+} else {
+  # Just use catch from tails if ika data doesn't exist
+  df_bet_total <- df_bet
+  df_skj_total <- df_skj
+  df_yft_total <- df_yft
+}
 ```
 
-**Unraised** tuna catches reported in Tails are illustrated below, in kilograms (kgs).
+```{r prep-unr-data}
+# Calculate total effort for the year by landing site using the ereporting trips
+tot_trips_ereport = data.frame(landing_site_name = ereporting_trips$landing_site_name,
+                    tot_trips = rowSums(ereporting_trips[,-1],na.rm=T)) |>
+                    mutate(landing_site_name = str_squish(landing_site_name))
+# Reshape trips
+best_estimate_trips_long <- best_estimate_trips |>
+  janitor::clean_names() |>
+  mutate(landing_site_name = str_squish(landing_site_name)) |>
+  pivot_longer(cols = 2:13, names_to = "months", values_to = "tot_trips_best")
+
+ereporting_trips_long <- ereporting_trips |>
+  janitor::clean_names() |>
+  mutate(landing_site_name = str_squish(landing_site_name)) |>
+  pivot_longer(cols = 2:13, names_to = "months", values_to = "tot_trips_spc")
+
+# Check if data exists
+species = c("skj", "bet", "yft")
+
+unr_list <- list()
+raised_list <- list()
+for (sp in species){
+  df_name <- paste0("df_", sp, "_total")
+  if (exists(df_name) && is.data.frame(get(df_name)) && nrow(get(df_name)) > 0) {
+    df <- get(df_name)
+    # Now calculate monthly average catch per trip
+    avg_sp = data.frame(landing_site_name = df$landing_site_name,
+                    tot_catch = rowSums(df[,-1],na.rm=T)) |>
+                  left_join(tot_trips_ereport) |>
+      mutate(cpd = round(tot_catch/tot_trips,0))
+    
+    unr_sp <- df  |> 
+      left_join(avg_sp |> 
+                  select(landing_site_name, 
+                         cpd))
+    
+    # Add result to unraised list
+    unr_list[[sp]] <- unr_sp # 
+    
+    # Calculate raised
+    unr_sp_long <- unr_sp |>
+      janitor::clean_names() |>
+      mutate(landing_site_name = str_squish(landing_site_name)) |>
+      pivot_longer(cols = 2:13, names_to = "months", values_to = "unr_catch")
+  
+    raised_df <- unr_sp_long |>
+      left_join(ereporting_trips_long, by = c("landing_site_name", "months")) |>
+      left_join(best_estimate_trips_long, by = c("landing_site_name", "months")) |>
+      mutate(raised = round(case_when(
+        is.na(tot_trips_spc) | tot_trips_spc == 0 ~ cpd * tot_trips_best,  # fallback: no sampling data
+        .default = (unr_catch / tot_trips_spc) * tot_trips_best            # main: monthly CPUE × best trips
+      ), 0))
+            # mutate(raised = round(case_when(unr_catch == 0 & tot_trips_spc == 0 ~ cpd * tot_trips_best,
+      #                           .default = (unr_catch/tot_trips_spc) * tot_trips_best), 0))
+
+    raised_df_wide <- raised_df |>
+      select(landing_site_name, months, raised) |>
+      pivot_wider(id_cols = 1, names_from = "months", values_from = "raised")
+    
+    # Add result to raised list
+    raised_list[[sp]] <- raised_df_wide
+    
+  }
+}
+```
+
+**Unraised** tuna catches reported in ereporting tools are illustrated below, in kilograms (kgs).
 
 <details>
 
@@ -408,31 +564,14 @@ if (nrow(data_3614) > 0) {
 #| echo: false
 #| results: 'asis'
 #| label: data_skj
-#| tbl-cap: !expr if(exists('df_skj') && is.data.frame(get('df_skj'))) glue::glue("Unraised skipjack catch (kgs) reported in Tails") else ""
+#| tbl-cap: !expr if ("skj" %in% names(unr_list)) glue::glue("Unraised skipjack catch (kgs) reported in ereporting tools.") else ""
 
 # Check if data exists
-if (nrow(df_by_species[["skj"]]) == 0) {
-  return(invisible(NULL))
-  }else{
-
-    # Calculate total effort by landing site
-    tot.trips = data.frame(landing_site_name = data_3527$landing_site_name,
-                    tot_trips = rowSums(data_3527[,-1],na.rm=T))
-    
-    # Now calculate monthly average catch per trip (using tab2)
-    avg.skj = data.frame(landing_site_name = df_skj$landing_site_name,
-                    tot_catch = rowSums(df_skj[,-1],na.rm=T)) |>
-                  left_join(tot.trips) |>
-      mutate(skj.cpd = round(tot_catch/tot_trips,0))
-    
-    unr.skj <- df_skj  |> 
-      left_join(avg.skj |> select(landing_site_name, skj.cpd))
-    
-    flextable(unr.skj) |>  
+if ("skj" %in% names(unr_list)) { 
+    flextable(unr_list$skj) |>  
     width(j=1, width=1.2) |> 
     fontsize(size = 10, part = "all")
 }
-
 ```
 
 </details>
@@ -444,28 +583,12 @@ if (nrow(df_by_species[["skj"]]) == 0) {
 ```{r}
 #| echo: false
 #| results: 'asis'
-#| label: df_yft
-#| tbl-cap: !expr if(exists('df_yft') && is.data.frame(get('df_yft'))) glue::glue("Unraised yellowfin catch (kgs) reported in Tails") else ""
+#| label: df_yft_total
+#| tbl-cap: !expr if ("yft" %in% names(unr_list)) glue::glue("Unraised yellowfin catch (kgs) reported in ereporting tools.") else ""
 
 # Check if data exists
-if (nrow(df_yft) == 0) {
-  return(invisible(NULL))
-  }else{
-
-    # Calculate total effort by landing site
-    tot.trips = data.frame(landing_site_name = data_3527$landing_site_name,
-                    tot_trips = rowSums(data_3527[,-1],na.rm=T))
-    
-    # Now calculate monthly average catch per trip (using tab2)
-    avg.yft = data.frame(landing_site_name = df_yft$landing_site_name,
-                    tot_catch = rowSums(df_yft[,-1],na.rm=T)) |>
-                  left_join(tot.trips) |>
-      mutate(yft.cpd = round(tot_catch/tot_trips,0))
-    
-    unr.yft <- df_yft  |> 
-      left_join(avg.yft |> select(landing_site_name, yft.cpd))
-    
-    flextable(unr.yft) |>  
+if ("yft" %in% names(unr_list)) { 
+    flextable(unr_list$yft) |>  
     width(j=1, width=1.2) |> 
     fontsize(size = 10, part = "all")
 }
@@ -481,28 +604,12 @@ if (nrow(df_yft) == 0) {
 ```{r}
 #| echo: false
 #| results: 'asis'
-#| label: df_bet
-#| tbl-cap: !expr if(exists('df_bet') && is.data.frame(get('df_bet'))) glue::glue("Unraised bigeye catch (kgs) reported in Tails") else ""
+#| label: df_bet_total
+#| tbl-cap: !expr if ("bet" %in% names(unr_list)) glue::glue("Unraised bigeye catch (kgs) reported in ereporting tools.") else ""
 
 # Check if data exists
-if (nrow(df_bet) == 0) {
-  return(invisible(NULL))
-  }else{
-
-    # Calculate total effort by landing site
-    tot.trips = data.frame(landing_site_name = data_3527$landing_site_name,
-                    tot_trips = rowSums(data_3527[,-1],na.rm=T))
-    
-    # Now calculate monthly average catch per trip (using tab2)
-    avg.bet = data.frame(landing_site_name = df_bet$landing_site_name,
-                    tot_catch = rowSums(df_bet[,-1],na.rm=T)) |>
-                  left_join(tot.trips) |>
-      mutate(bet.cpd = round(tot_catch/tot_trips,0))
-    
-    unr.bet <- df_bet  |> 
-      left_join(avg.bet |> select(landing_site_name, bet.cpd))
-    
-    flextable(unr.bet) |>  
+if ("bet" %in% names(unr_list)) { 
+    flextable(unr_list$bet) |>  
     width(j=1, width=1.2) |> 
     fontsize(size = 10, part = "all")
 }
@@ -519,89 +626,38 @@ if (nrow(df_bet) == 0) {
 
 Raised catch estimates for skipjack tuna (kg) in `r params$year`:
 
-```{r}
-estimate_best <- tab8 |>
-  janitor::clean_names() |>
-  mutate(landing_site_name = str_squish(landing_site_name)) |>
-  pivot_longer(cols = 2:13, names_to = "months", values_to = "tot_trips_best")
-
-spc_best <- combined |>
-  janitor::clean_names() |>
-  mutate(landing_site_name = str_squish(landing_site_name)) |>
-  pivot_longer(cols = 2:13, names_to = "months", values_to = "tot_trips_spc")
-
-## Filter and reshape unr
-skj_long <- unr.skj |>
-  janitor::clean_names() |>
-  mutate(landing_site_name = str_squish(landing_site_name)) |>
-  pivot_longer(cols = 2:13, names_to = "months", values_to = "unr_catch")
-
-yft_long <- unr.yft |>
-  janitor::clean_names() |>
-  mutate(landing_site_name = str_squish(landing_site_name)) |>
-  pivot_longer(cols = 2:13, names_to = "months", values_to = "unr_catch")
-
-bet_long <- unr.bet |>
-  janitor::clean_names() |>
-  mutate(landing_site_name = str_squish(landing_site_name)) |>
-  pivot_longer(cols = 2:13, names_to = "months", values_to = "unr_catch")
-
-## calculate raised values per sp
-rs.skj <- skj_long |>
-  left_join(spc_best, by = c("landing_site_name", "months")) |>
-  left_join(estimate_best, by = c("landing_site_name", "months")) |>
-  mutate(raised = round(case_when(unr_catch == 0 & tot_trips_spc == 0 ~ skj_cpd * tot_trips_best,
-                            .default = (unr_catch/tot_trips_spc) * tot_trips_best), 0))
-
-rs.skj_wide <- rs.skj |>
-  select(landing_site_name, months, raised) |>
-  pivot_wider(id_cols = 1, names_from = "months", values_from = "raised")
-
-# yft
-rs.yft <- yft_long |>
-  left_join(spc_best, by = c("landing_site_name", "months")) |>
-  left_join(estimate_best, by = c("landing_site_name", "months")) |>
-  mutate(raised = round(case_when(unr_catch == 0 & tot_trips_spc == 0 ~ yft_cpd * tot_trips_best,
-                            .default = (unr_catch/tot_trips_spc) * tot_trips_best), 0))
-
-rs.yft_wide <- rs.yft |>
-  select(landing_site_name, months, raised) |>
-  pivot_wider(id_cols = 1, names_from = "months", values_from = "raised")
-
-# bet
-rs.bet <- bet_long |>
-  left_join(spc_best, by = c("landing_site_name", "months")) |>
-  left_join(estimate_best, by = c("landing_site_name", "months")) |>
-  mutate(raised = round(case_when(unr_catch == 0 & tot_trips_spc == 0 ~ bet_cpd * tot_trips_best,
-                            .default = (unr_catch/tot_trips_spc) * tot_trips_best), 0))
-
-rs.bet_wide <- rs.bet |>
-  select(landing_site_name, months, raised) |>
-  pivot_wider(id_cols = 1, names_from = "months", values_from = "raised")
-```
-
 ```{r raise-skj}
 # Remove rows where no catch was reported - as no average exists...
-rs.skj_wide$no_catch <- rowSums(rs.skj_wide[, 2:13],na.rm=T )
 
-missing.skj = rs.skj_wide |>  filter(no_catch==0)
-rs.skj_wide <- rs.skj_wide |>  filter(no_catch>0) |>  select(-no_catch)
-
-flextable(rs.skj_wide) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
+if ("skj" %in% names(raised_list)) { 
+  
+  df_unraised <- raised_list$skj 
+  df_unraised$no_catch <- rowSums(df_unraised[, 2:13],na.rm=T )
+  
+  missing_unraised_skj = df_unraised |>  filter(no_catch==0)
+  
+  df_unraised <- df_unraised |>  
+    filter(no_catch>0) |>  
+    select(-no_catch)
+  
+  flextable(df_unraised) |> 
+    colformat_num(j = 2:13, digits = 0) |>  
+    fontsize(size = 8, part = "all")
+}
 ```
+
+</details>
 
 <details>
 
 <summary>Missing skipjack catch with effort</summary>
 
-```{r missing.skj}
+```{r missing_skj}
 # Rows with no catch but some estimated fishing effort
-if(nrow(missing.skj) > 0){
-  flextable(missing.skj) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
+if(exists('missing_unraised_skj') && nrow(missing_unraised_skj) > 0){
+  flextable(missing_unraised_skj) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
 }
 ```
-
-</details>
 
 </details>
 
@@ -612,29 +668,38 @@ if(nrow(missing.skj) > 0){
 Raised catch estimates for yellowfin tuna (kg) in `r params$year`:
 
 ```{r raise-yft}
-
 # Remove rows where no catch was reported - as no average exists...
-rs.yft_wide$no_catch <- rowSums(rs.yft_wide[, 2:13],na.rm=T )
 
-missing.yft = rs.yft_wide |>  filter(no_catch==0)
-rs.yft_wide <- rs.yft_wide |>  filter(no_catch>0) |>  select(-no_catch)
-
-flextable(rs.yft_wide) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
+if ("yft" %in% names(raised_list)) { 
+  
+  df_unraised <- raised_list$yft 
+  df_unraised$no_catch <- rowSums(df_unraised[, 2:13],na.rm=T )
+  
+  missing_unraised_yft = df_unraised |>  filter(no_catch==0)
+  
+  df_unraised <- df_unraised |>  
+    filter(no_catch>0) |>  
+    select(-no_catch)
+  
+  flextable(df_unraised) |> 
+    colformat_num(j = 2:13, digits = 0) |>  
+    fontsize(size = 8, part = "all")
+}
 ```
+
+</details>
 
 
 <details>
 
 <summary>Missing yellowfin catch with effort</summary>
 
-```{r missing.yft}
+```{r missing_yft}
 # Rows with no catch but some estimated fishing effort
-if(nrow(missing.yft) > 0){
-  flextable(missing.yft) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
+if(exists('missing_unraised_yft') && nrow(missing_unraised_yft) > 0){
+  flextable(missing_unraised_yft) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
 }
 ```
-
-</details>
 
 </details>
 
@@ -646,28 +711,36 @@ Raised catch estimates for bigeye tuna (kg) in `r params$year`:
 
 ```{r raise-bet}
 # Remove rows where no catch was reported - as no average exists...
-rs.bet_wide$no_catch <- rowSums(rs.bet_wide[, 2:13],na.rm=T )
 
-missing.bet = rs.bet_wide |>  filter(no_catch==0)
-rs.bet_wide <- rs.bet_wide |>  filter(no_catch>0) |>  select(-no_catch)
-
-flextable(rs.bet_wide) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
+if ("bet" %in% names(raised_list)) { 
+  
+  df_unraised <- raised_list$bet 
+  df_unraised$no_catch <- rowSums(df_unraised[, 2:13],na.rm=T )
+  
+  missing_unraised_bet = df_unraised |>  filter(no_catch==0)
+  
+  df_unraised <- df_unraised |>  
+    filter(no_catch>0) |>  
+    select(-no_catch)
+  
+  flextable(df_unraised) |> 
+    colformat_num(j = 2:13, digits = 0) |>  
+    fontsize(size = 8, part = "all")
+}
 ```
 
+</details>
 
 <details>
 
 <summary>Missing bigeye catch with effort</summary>
 
-```{r missing.bet}
+```{r missing_bet}
 # Rows with no catch but some estimated fishing effort
-if(nrow(missing.bet) > 0){
-  flextable(missing.bet) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
+if(exists('missing_unraised_bet') && nrow(missing_unraised_bet) > 0){
+  flextable(missing_unraised_bet) |> colformat_num(j = 2:13, digits = 0) |>  fontsize(size = 8, part = "all")
 }
 ```
-
-
-</details>
 
 </details>
 
@@ -679,40 +752,44 @@ Here we take the raised catch estimates for the three key tuna species and sum t
 #| label: raised.ace
 #| tbl-cap: Raised and unraised annual artisanal catch estimates in mt
 
-unr.tmp = unr.skj |>  ungroup() |> select(-c(1,14)) |> summarise_all(sum, na.rm=T)
-rs.tmp = rs.skj_wide |> ungroup() |> select(-1)  |> summarise_all(sum, na.rm=T)
-skj.art.ace = data.frame(
-  sp = 'SKJ',
-  unraised = round(rowSums(unr.tmp)/1000,2),
-  raised = round(rowSums(rs.tmp)/1000,2)
-)
+ace <- data.frame()
 
-unr.tmp = unr.yft |> ungroup() |> select(-c(1,14))  |> summarise_all(sum, na.rm=T)
-rs.tmp = rs.yft_wide |> ungroup() |> select(-1)  |> summarise_all(sum, na.rm=T)
-yft.art.ace = data.frame(
-  sp = 'YFT',
-  unraised = round(rowSums(unr.tmp)/1000,2),
-  raised = round(rowSums(rs.tmp)/1000,2)
-)
-
-if(exists("unr.bet")){
-unr.tmp = unr.bet |> ungroup() |> select(-c(1,14)) |> summarise_all(sum, na.rm=T)
-rs.tmp = rs.bet_wide |> ungroup() |> select(-1)  |> summarise_all(sum, na.rm=T)
-
-bet.art.ace = data.frame(
-  sp = 'BET',
-  unraised = round(rowSums(unr.tmp)/1000,2),
-  raised = round(rowSums(rs.tmp)/1000,2)
-)
+for (sp in species) {
+  
+  if (sp %in% names(unr_list)) {
+    
+    unraised <- unr_list[[sp]] |>
+      data.frame() |>
+      ungroup() |>
+      select(-c(1, 14)) |>
+      summarise(across(everything(), \(x) sum(x, na.rm = TRUE))) |>
+      rowSums()
+    
+    raised <- raised_list[[sp]] |>
+      data.frame() |>
+      ungroup() |>
+      select(-1) |>
+      summarise(across(everything(), \(x) sum(x, na.rm = TRUE))) |>
+      rowSums()
+    
+  } else {
+    unraised <- 0
+    raised   <- 0
+  }
+  
+  ace <- bind_rows(ace, data.frame(
+    sp       = toupper(sp),
+    unraised = round(unraised / 1000, 2),
+    raised   = round(raised / 1000, 2)
+  ))
 }
 
 # Produce final output
-
-ace = rbind(skj.art.ace, yft.art.ace, bet.art.ace) |>
+ace_final = ace |>
   gather(key='Method', value='ACE', -1) |>
   spread(key = sp, value=ACE)
 
-flextable(ace) |>  fontsize(size = 12, part = "all")
+flextable(ace_final) |>  fontsize(size = 12, part = "all")
 
 ```
 
@@ -720,13 +797,14 @@ flextable(ace) |>  fontsize(size = 12, part = "all")
 #| label: ace.perc
 #| tbl-cap: Percentage of the artisanal tuna ACE associated with each of the key species
 
-ace$tot = rowSums(ace[,-1])
-ace <- ace |>  mutate(SKJ = round(SKJ/tot*100,2),
+ace_final$tot = rowSums(ace_final[,-1])
+ace_final <- ace_final |>  mutate(SKJ = round(SKJ/tot*100,2),
                       YFT = round(YFT/tot*100,2),
                       BET = round(BET/tot*100,2)) |>
                 select(-tot)
 
-flextable(ace)  |>  fontsize(size = 12, part = "all")
+flextable(ace_final) |>
+  fontsize(size = 12, part = "all")
 
 ```
 
