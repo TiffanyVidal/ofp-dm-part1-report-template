@@ -15,8 +15,8 @@ execute:
   message: false
   warning: false
 params:
-  flag: 'CK'
-  year: 2024
+  flag: 'FJ'
+  year: 2025
   author: "AUTHOR"
 ---
 
@@ -54,17 +54,31 @@ data_3614 <- read_and_clean(this_yr_folder, country_cd, r_code = 3614)|>
 ika_trips_file = paste0(this_yr_folder, "ikasavea/", country_cd, "_trips_landing_site.csv")
 
 if (file.exists(ika_trips_file)){
-  data_ika_raw <- read.csv(paste0(this_yr_folder, "ikasavea/", country_cd, "_trips_landing_site.csv"))
-}
-if (nrow(data_ika_raw) == 0 && nrow(data_3615) == 0) {
-  cat("No Ikasavea trip data found for this country/year. Document generation stopped.\n")
+  data_ika_raw <- tryCatch(
+    read.csv(paste0(this_yr_folder, "ikasavea/", country_cd, "_trips_landing_site.csv")),
+    error = function(e) NULL
+  )
+  
+  if (exists("data_ika_raw")){
+    if ("LandingSite" %in% colnames(data_ika_raw) && nrow(data_ika_raw) > 0){
+        data_ika_raw <- data_ika_raw|>
+          rename(landing_site_name = LandingSite) |>
+          group_by(Country, landing_site_name, Year, Month) |>  
+          summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE)), .groups = "drop") |>
+          filter(Year == report_year)
+    }
+    
+  }
+  
+  if (is.null(data_ika_raw) || nrow(data_ika_raw) == 0 || is.null(data_ika_raw)) rm(data_ika_raw)
+  }
+
+if (!exists("data_ika_raw") && nrow(data_3615) == 0) {
+  cat("No Ikasavea or Tails trip data found for this country/year. Document generation stopped.\n")
   knitr::knit_exit()
 }
 
-if (nrow(data_ika_raw) > 0){
-  
-  data_ika_raw <- data_ika_raw|>
-    rename(landing_site_name = LandingSite)
+if (exists("data_ika_raw")){
   
    data_ika_trips <- data_ika_raw |>
     mutate(across(where(is.character), tolower)) |>
@@ -88,7 +102,7 @@ if (nrow(data_ika_raw) > 0){
   
   }
 
-both_exist <- nrow(data_ika_trips) > 0 && exists('data_3615') && 
+both_exist <- exists('data_ika_trips') && nrow(data_ika_trips) > 0 && exists('data_3615') && 
               is.data.frame(get('data_3615')) && nrow(data_3615) > 0
 ```
 
@@ -96,26 +110,25 @@ both_exist <- nrow(data_ika_trips) > 0 && exists('data_3615') &&
 
 ## Methodology
 
-The steps for preparing the artisanal catch estimates (ACE) for key tuna species are outlined below. The following tabs showing the catch and effort estimates that are used to prepare the final catch estimates. 
+The steps for preparing the artisanal catch estimates (ACE) for key tuna species are outlined below. The following tabs showing the catch and effort estimates that are used to prepare the final catch estimates.
 
 It should be noted that the Tails and Ikasavea apps are separate applications collecting a sample of the artisanal fishing activity. Some members only use Ikasavea, others use only Tails and some use both. At this point, we do not have comprehensive surveys in place to scale up how much of the fishing activity is recorded using these ereporting platforms in a reliable and representative manner. Therefore, we are basing the ACE estimates presented here on a combination of reporting catch and effort from these two sources (in case data is stored in both sources we will combine their effort and catch values) as well as local expert knowledge of the activities at different landing sites.
 
 In the future, we hope to progress the Frame Survey concept to refine the estimates of total effort that are used to scale up the sampled catch estimates reported in the respective applications.
 
+**1.** We provide a summary of number of trips by month and landing site recorded in Tails (if any)
 
-**1.**  We provide a summary of number of trips by month and landing site recorded in Tails (if any)
+**2.** We provide a summary of number of trips by month and landing site recorded in Ikasavea (if any)
 
-**2.**  We provide a summary of number of trips by month and landing site recorded in Ikasavea (if any)
+**3.** If available data is collected using Ikasavea and TAILS we combine (sum) those values to provide final number of trips based on ereporting platforms
 
-**3.**  If available data is collected using Ikasavea and TAILS we combine (sum) those values to provide final number of trips based on ereporting platforms
+**4.** We compare to "rough" estimates of average monthly landings (trips) per month and landing site provided by members
 
-**4.**  We compare to "rough" estimates of average monthly landings (trips) per month and landing site provided by members
+**5.** The tuna catch by landings site and month is calculated (if data is available in Tails and Ikasavea we combine the data, ie: we sum the catches recorded on these two tools)
 
-**5.**  The tuna catch by landings site and month is calculated (if data is available in Tails and Ikasavea we combine the data, ie: we sum the catches recorded on these two tools)
+**6.** We then multiply the monthly CPUE (catch/trip) by the estimated number of trips, and if those data are missing, we use an average CPUE multiplied by the number of trips
 
-**6.**  We then multiply the monthly CPUE (catch/trip) by the estimated number of trips, and if those data are missing, we use an average CPUE multiplied by the number of trips
-
-**7.**  The artisanal ACE is the sum across all months and landing sites
+**7.** The artisanal ACE is the sum across all months and landing sites
 
 ## Fishing Effort
 
@@ -137,7 +150,14 @@ If member provided a spreadsheet with the estimated trips per month at each land
 
 # Check if data exists
 if (!(nrow(data_3615) == 0)) {
-  data_3615 <-  data_3615 |> select(-entity)
+  
+  names(data_3615) <- gsub(x = names(data_3615), pattern = "_trips$", replacement = "")  
+  
+  data_3615 <- data_3615 |>
+    rename_with(~ month.abb[match(., tolower(month.abb))], 
+              .cols = any_of(tolower(month.abb))) |> 
+    select(-entity)
+  
   flextable(data_3615) |>  
   width(j=1, width=1.2) |> 
   fontsize(size = 10, part = "all")
@@ -157,8 +177,8 @@ if (!(nrow(data_3615) == 0)) {
 #| echo: false
 #| results: 'asis'
 #| label: Monthly-effort-ika
-#| tbl-cap: !expr if(nrow(data_ika_trips) == 0) glue::glue("Number of trips per month and landing site reported in Ikasavea") else ""
-if (nrow(data_ika_trips) == 0){
+#| tbl-cap: !expr if(!exists('data_ika_trips')) glue::glue("Number of trips per month and landing site reported in Ikasavea") else ""
+if (!exists('data_ika_trips')){
   cat("No fishing trips recorded in Ikasavea for the selected year.")
 }else{
   flextable(df_ika_wide) |>  
@@ -179,7 +199,6 @@ If you have artisanal data being collected in Tails and in Ikasavea, you will se
 #| eval: !expr both_exist
 #| results: 'asis'
 #| label: diff_t2_ika
-#| tbl-cap: !expr if(nrow(data_ika_trips) == 0) glue::glue("Fishing trips reported in Ikasavea") else ""
 
 if (both_exist) {
 
@@ -305,16 +324,19 @@ Now estimate monthly trips, based on the **max** *value either reported by the m
 if (nrow(combined_t2_ika)>0){ # it means tails + ikasavea
   
   ereporting_trips <- combined_t2_ika |>
-  mutate(landing_site_name = str_squish(landing_site_name))
+    mutate(landing_site_name = str_squish(landing_site_name)) |>
+    data.frame()
   ereporting_trips_tag <- c("Trips: Ikasavea + Tails")
   
-  }else if (nrow(data_ika_trips) == 0 && nrow(data_3615) > 0){ # so it means you only have tails
-    ereporting_trips <- data_3615|>
-    mutate(landing_site_name = str_squish(landing_site_name))
+  }else if (!exists("data_ika_trips") && nrow(data_3615) > 0){ # so it means you only have tails
+    ereporting_trips <- data_3615 |>
+      mutate(landing_site_name = str_squish(landing_site_name)) |>
+      data.frame()
     ereporting_trips_tag <- c("Trips: Tails")
       
   }else if(nrow(data_3615) == 0 && nrow(data_ika_trips) > 0){ # it means you only have ikasavea 
-    ereporting_trips <- df_ika_wide 
+    ereporting_trips <- df_ika_wide |>
+      data.frame()
     ereporting_trips_tag <- c("Trips: Ikasavea")
   }else{
     ereporting_trips <- data.frame()
@@ -689,7 +711,6 @@ if ("yft" %in% names(raised_list)) {
 
 </details>
 
-
 <details>
 
 <summary>Missing yellowfin catch with effort</summary>
@@ -801,7 +822,8 @@ ace_final$tot = rowSums(ace_final[,-1])
 ace_final <- ace_final |>  mutate(SKJ = round(SKJ/tot*100,2),
                       YFT = round(YFT/tot*100,2),
                       BET = round(BET/tot*100,2)) |>
-                select(-tot)
+  mutate(across(BET:YFT, ~replace_na(.,0))) |>
+  select(-tot)
 
 flextable(ace_final) |>
   fontsize(size = 12, part = "all")

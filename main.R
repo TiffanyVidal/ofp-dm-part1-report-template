@@ -1,5 +1,6 @@
 ###################################################
 ## Part 1, Addendum and Artisanal Annual Reports ## 
+##                                               ##  
 ## Author: SPC                                   ##
 ## Year: 2026                                    ##
 ###################################################
@@ -10,18 +11,18 @@ source("utils.R")
 get_all_country_codes()
 
 # Step 2: Define params ####
-country_codes <- c("CK") # get_all_country_codes()
-r_year <- 2024
+country_codes <- get_all_country_codes() # "VU"
+r_year <- 2025
 report_author <- "Jessica LS"
 rewrite_files <- FALSE # TRUE if you want to make sure the data is updated.
-reports_list <- c("artisanal") # options are = c("addendum", "part1", "artisanal"))
+reports_list <- c("artisanal")#, "addendum", "part1")
 
 # Step 3: Read/download data ####
 
 # Use the params above to download data from T2 and Ikasavea or read data if available in your computer
 for (country_code in country_codes) {
-  process_country_data(country_code = country_code, r_year = r_year, report_ids = report_ids, 
-                       report_ids_ikasavea = report_ids_ikasavea,
+  process_country_data(country_code = country_code, 
+                       r_year = r_year,
                        rewrite_files = rewrite_files)
 }
 

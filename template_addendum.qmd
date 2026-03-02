@@ -638,8 +638,8 @@ All CCMs shall report annually to the WCPFC Commission all catches of North Paci
 #| label: tbl-cmm2023-03
 #| tbl-cap: 'Summary of vessels fishing in the North Pacific and the number and metric tonnes of North Pacific swordfish catches reported in the past 5 years. The number of vessels reported in this table represents all longline vessels fishing in the North Pacific.'
 
-
-a12 <- read_csv(str_c('./data/', member, '/CMM2023_03.csv'))
+# Use the exact file path from your directory structure
+a12 <- read_and_clean(this_yr_folder, member, r_code=3513)
 
 if (nrow(a12) > 0) {
   msg = ' '

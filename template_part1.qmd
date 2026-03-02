@@ -14,7 +14,7 @@ format:
 page-layout: full
 edit: visual
 params:
-  country_code: 'FJ'          # 2-letter country code (all CAPS)
+  country_code: 'TV'          # 2-letter country code (all CAPS)
   year: 2024                  # Reporting year (max year of data)
   data_provided: 'Yes'        # Was SciData provided by deadline?
   author: "AUTHOR"
@@ -190,21 +190,27 @@ data_3608 <- safe_read_and_clean(
   }
 )
 
-# separate in PS, LL and PL
-data_3605_ps <- data_3605 |>
-  filter(gear_code == "s") |>
-  filter(sp_code %in% ps_species) |>
-  select(sp_code, year, catch)
-
-data_3605_ll <- data_3605 |>
-  filter(gear_code == "l") |>
-  filter(sp_code %in% ll_species) |>
-  select(sp_code, year, catch)
-
-data_3605_pl <- data_3605 |>
-  filter(gear_code == "pl") |>
-  filter(sp_code %in% ll_species) |>
-  select(sp_code, year, catch)
+if (nrow(data_3605) == 0){
+  data_3605_ps <- data.frame()
+  data_3605_ll <- data.frame()
+  data_3605_pl <- data.frame()
+  }else{
+  # separate in PS, LL and PL
+  data_3605_ps <- data_3605 |>
+    filter(gear_code == "s") |>
+    filter(sp_code %in% ps_species) |>
+    select(sp_code, year, catch)
+  
+  data_3605_ll <- data_3605 |>
+    filter(gear_code == "l") |>
+    filter(sp_code %in% ll_species) |>
+    select(sp_code, year, catch)
+  
+  data_3605_pl <- data_3605 |>
+    filter(gear_code == "pl") |>
+    filter(sp_code %in% ll_species) |>
+    select(sp_code, year, catch)
+}
 
 # shape for tables
 if (nrow(data_3605_ps) > 0){
@@ -219,7 +225,7 @@ if (nrow(data_3605_ps) > 0){
 if (nrow(data_3605_ll) > 0){
   data_3605_ll_tbl <- data_3605_ll |>
     pivot_wider(names_from = year, values_from = catch) |>
-    mutate(across(2:5, ~replace_na(.,0))) |>
+    mutate(across(where(is.numeric), ~replace_na(.,0))) |>
     arrange(sp_code) |>
     rename(Species = sp_code) |>
     janitor::adorn_totals("row")
@@ -228,7 +234,7 @@ if (nrow(data_3605_ll) > 0){
 if (nrow(data_3605_pl) > 0){
   data_3605_pl_tbl <- data_3605_pl |>
     pivot_wider(names_from = year, values_from = catch) |>
-    mutate(across(2:5, ~replace_na(.,0))) |>
+    mutate(across(where(is.numeric), ~replace_na(.,0))) |>
     arrange(sp_code) |>
     rename(Species = sp_code) |>
     janitor::adorn_totals("row")
@@ -671,11 +677,17 @@ pl_size_fn <- function(data) {
 ```
 
 ```{r}
+ll_caption <- if(nrow(ves_raw) > 0 && "gear_code" %in% names(ves_raw) && nrow(ves_raw |> filter(gear_code == "l")) > 0) {
+  glue::glue("Number of {country_name} longline vessels, by size category, active in the WCPFC Convention Area, over {yr_range}")
+} else NULL
+```
+
+```{r}
 #| label: tbl-tbl2-longline
-#| tbl-cap: !expr if(nrow(ves_raw |> filter(gear_code == "l")) > 0) glue::glue("Number of {country_name} longline vessels, by size category, active in the WCPFC Convention Area, over {yr_range}") else ""
+#| eval: !expr "!is.null(ll_caption)"
+#| tbl-cap: !expr ll_caption
 #| echo: false
 #| results: 'asis'
-
 render_vessel_table(
   ves_data = ves_raw,
   gear_name = "l",
@@ -685,8 +697,16 @@ render_vessel_table(
 ```
 
 ```{r}
+ps_caption <- if(nrow(ves_raw) > 0 && "gear_code" %in% names(ves_raw) && nrow(ves_raw |> filter(gear_code == "ps")) > 0) {
+  glue::glue("Number of {country_name} purse seine vessels, by size category, active in the WCPFC Convention Area, over {yr_range}")
+} else NULL
+```
+
+
+```{r}
 #| label: tbl-tbl2-ps
-#| tbl-cap: !expr  if(nrow(ves_raw |> filter(gear_code == "s")) > 0) glue::glue("Number of {country_name} purse seine vessels, by size category, active in the WCPFC Convention Area, over {yr_range}") else ""
+#| eval: !expr "!is.null(ps_caption)"
+#| tbl-cap: !expr ps_caption
 #| echo: false
 #| results: 'asis'
 
@@ -700,8 +720,15 @@ render_vessel_table(
 ```
 
 ```{r}
+pl_caption <- if(nrow(ves_raw) > 0 && "gear_code" %in% names(ves_raw) && nrow(ves_raw |> filter(gear_code == "pl")) > 0) {
+  glue::glue("Number of {country_name} pole line vessels, by size category, active in the WCPFC Convention Area, over {yr_range}")
+} else NULL
+```
+
+```{r}
 #| label: tbl-tbl2-pl
-#| tbl-cap: !expr  if(nrow(ves_raw |> filter(gear_code == "pl")) > 0) glue::glue("Number of {country_name} pole-and-line vessels, by size category, active in the WCPFC Convention Area, over {yr_range}") else ""
+#| eval: !expr "!is.null(pl_caption)"
+#| tbl-cap: !expr pl_caption
 #| echo: false
 #| results: 'asis'
 
@@ -719,6 +746,7 @@ render_vessel_table(
 
 ```{r}
 #| label: fig-figmapps
+#| eval: !expr "nrow(data_3608) > 0"
 #| fig-cap: !expr  if(nrow(data_3608 |> filter(gear_code == "s") > 0)) glue::glue("Map showing the distribution of target species catch (mt) for the {country_name} purse seine fishery.") else ""
 #| fig-width: 13
 #| fig-height: 13
@@ -743,6 +771,7 @@ render_spatial_map(
 
 ```{r}
 #| label: fig-figmapl
+#| eval: !expr "nrow(data_3608) > 0"
 #| fig-cap: !expr if(nrow(data_3608 |> filter(gear_code == "l") > 0)) glue::glue("Map showing the distribution of target species catch (mt) for the {country_name} longline fishery.") else ""
 #| fig-width: 13
 #| fig-height: 13
@@ -765,6 +794,7 @@ render_spatial_map(
 
 ```{r}
 #| label: fig-figmappl
+#| eval: !expr "nrow(data_3608) > 0"
 #| fig-cap: !expr if(nrow(data_3608 |> filter(gear_code == "pl") > 0)) glue::glue("Map showing the distribution of target species catch (mt) for the {country_name} pole line fishery.") else ""
 #| fig-width: 13
 #| fig-height: 13
@@ -791,54 +821,74 @@ render_spatial_map(
 Note that the tables below are specified to include - seabird, turtle and marine mammals in the instructions but we also include things like some rays and sharks. Note that Alive plus Dead does not necessarily equal Total due to unknowns. PW has no SSI captures and TK and NU have no flagged fleets.
 
 ```{r}
+ssi_s_caption <- if(nrow(data_2953) > 0 && "gear" %in% names(data_2953) && nrow(data_2953 |> filter(gear == "s")) > 0) {
+  glue::glue("Observed annual estimated catches of species of special interest (seabird, turtle and marine mammals) by the {country_name} purse seine fleet, in the WCPFC Convention Area, for years {yr_range}, to the extent possible. Note that the Total may not reflect the sum of Alive and Dead as some animals are reported with an Unknown status.")
+} else NULL
+```
+
+```{r}
 #| label: tbl-tbl3s
-#| tbl-cap: !expr if(nrow(data_2953 |> filter(gear == "s") > 0)) glue::glue("Observed annual estimated catches of species of special interest (seabird, turtle and marine mammals) by the {country_name} purse seine fleet, in the WCPFC Convention Area, for years {yr_range}, to the extent possible. Note that the Total may not reflect the sum of Alive and Dead as some animals are reported with an Unknown status.") else ""
+#| eval: !expr "!is.null(ssi_s_caption)"
+#| tbl-cap: !expr ssi_s_caption
 #| echo: false
 #| results: 'asis'
-
 render_ssi_table(
   data = data_2953,
   gear_code = "s",
   gear_name = "purse seine",
   intro_text = "Some text"
-
 )
 ```
 
 ```{r}
+ssi_l_caption <- if(nrow(data_2953) > 0 && "gear" %in% names(data_2953) && nrow(data_2953 |> filter(gear == "l")) > 0) {
+  glue::glue("Observed annual estimated catches of species of special interest (seabird, turtle and marine mammals) by the {country_name} longline fleet, in the WCPFC Convention Area, for years {yr_range}")} else NULL
+
+```
+
+
+```{r}
 #| label: tbl-tbl3ll
-#| tbl-cap: !expr if(nrow(data_2953 |> filter(gear == "l") > 0)) glue::glue("Observed annual estimated catches of species of special interest (seabird, turtle and marine mammals) by the {country_name} longline fleet, in the WCPFC Convention Area, for years {yr_range}") else ""
+#| eval: !expr "!is.null(ssi_l_caption)"
+#| tbl-cap: !expr ssi_l_caption
 #| echo: false
 #| results: 'asis'
-
 render_ssi_table(
   data = data_2953,
   gear_code = "l",
   gear_name = "longline",
   intro_text = "Some text"
-
 )
 ```
 
 ```{r}
+ssi_pl_caption <- if(nrow(data_2953) > 0 && "gear" %in% names(data_2953) && nrow(data_2953 |> filter(gear == "pl")) > 0) {
+  glue::glue("Observed annual estimated catches of species of special interest (seabird, turtle and marine mammals) by the {country_name} pole line fleet, in the WCPFC Convention Area, for years {yr_range}")} else NULL
+
+```
+
+
+```{r}
 #| label: tbl-tbl3lpl
-#| tbl-cap: !expr if(nrow(data_2953 |> filter(gear == "pl") > 0)) glue::glue("Observed annual estimated catches of species of special interest (seabird, turtle and marine mammals) by the {country_name} pole line fleet, in the WCPFC Convention Area, for years {yr_range}") else ""
+#| eval: !expr "!is.null(ssi_pl_caption)"
+#| tbl-cap: !expr ssi_pl_caption
 #| echo: false
 #| results: 'asis'
-
 render_ssi_table(
   data = data_2953,
   gear_code = "pl",
   gear_name = "pole line",
   intro_text = "Some text"
-
 )
 ```
 
+
 ```{r}
 # Create non-target purse seine table
-# Create table of non-target species for purse seine
-PS_tab <- 
+
+if (nrow(data_3605) > 0){
+  # Create table of non-target species for purse seine
+  PS_tab <- 
   data_3605 |>  
   filter(gear_code == "s", 
          year %in% yrs_long,
@@ -847,12 +897,29 @@ PS_tab <-
   summarise(catch = sum(catch, na.rm = TRUE), .groups = "drop") |> 
   pivot_wider(names_from = year, values_from = catch, values_fill = 0) |> 
   arrange(sp_code)
+  
+  # Create table of non-target species for longline
+  LL_tab <- 
+    data_3605 |>  
+    filter(gear_code == "l", 
+           year %in% yrs_long,
+           !sp_code %in% ps_species) |>  # Exclude only the key species
+    group_by(sp_code, year) |> 
+    summarise(catch = sum(catch, na.rm = TRUE), .groups = "drop") |> 
+    pivot_wider(names_from = year, values_from = catch, values_fill = 0) |> 
+    arrange(sp_code)
+
+}else{
+  PS_tab <- data.frame()
+  LL_tab <- data.frame()
+}
 
 #todo: present species name instead of codes
 ```
 
 ```{r}
 #| label: tbl-tbl4s
+#| eval: !expr "nrow(data_3605) > 0"
 #| tbl-cap: !expr glue::glue("Annual estimated catches of non-target, associated and dependent species, including sharks, by the {country_name} purse seine fleet, in the WCPFC Convention Area over {yr_range}")
 #| echo: false
 #| results: 'asis'
@@ -873,21 +940,10 @@ if (nrow(PS_tab) > 0) {
 }
 ```
 
-```{r}
-# Create table of non-target species for longline
-LL_tab <- 
-  data_3605 |>  
-  filter(gear_code == "l", 
-         year %in% yrs_long,
-         !sp_code %in% ps_species) |>  # Exclude only the key species
-  group_by(sp_code, year) |> 
-  summarise(catch = sum(catch, na.rm = TRUE), .groups = "drop") |> 
-  pivot_wider(names_from = year, values_from = catch, values_fill = 0) |> 
-  arrange(sp_code)
-```
 
 ```{r}
 #| label: tbl-tbl4l
+#| eval: !expr "nrow(data_3605) > 0"
 #| tbl-cap: !expr glue::glue("Annual estimated catches of non-target, associated and dependent species, including sharks, by the {country_name} longline fleet, in the WCPFC Convention Area over {yr_range}")
 #| echo: false
 #| results: 'asis'
@@ -932,8 +988,6 @@ if (file.exists(catch_file)){
   dis_dat <- read.csv(catch_file)
   flextable(dis_dat)
 }
-
-
 
 ```
 

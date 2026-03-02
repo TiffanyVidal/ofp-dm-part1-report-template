@@ -19,7 +19,7 @@ reporting year are correct. Key parameters include:
 
 Output reports are saved to the *reports/* folder. The diagram below summarises the full pipeline.
     
-![Diagram - Report Generation Pipeline](pipeline_diagram.png)
+![Diagram - Report Generation Pipeline](img/pipeline_diagram.png)
 
 ## Setup Instructions
 
@@ -38,9 +38,12 @@ Output reports are saved to the *reports/* folder. The diagram below summarises 
 
 4.  **Important**: Never commit the `.env` file to version control
 
-5.  Open script main.R and make sure all packages are installed
+5.  Open script `main.R` and make sure all packages are installed
 
-6.  Run main.R - this will "download" all T2 data required for Part 1 as
+6.  Go to *Step 2* section in `main.R` and define the parameters for your case (the most important
+one is to set up `country_codes` to the **two-letter code of your country**)
+
+7.  Run `main.R` - this will "download" all T2 data required for Part 1 as
     well as generate Part 1, addendum and artisinal reports
 
 ## Include narratives
@@ -76,12 +79,35 @@ from the data sources table below to locate the corresponding chunk in the `.qmd
 
 ## Data used to produce the reports
 
-All tables, figures and maps presented in the report are based on data
+All tables, figures and maps presented in the report template are based on data
 available in T2 and Ikasavea reports.
 
-Below we specify the data source for each result displayed in the
+The tables below specify the data source for each result displayed in the
 reports (ie.: which T2 report is used to produce each of the graphs,
 figures and maps in the reports).
+
+However, In some cases, members can have additional data (tables, spreadsheets and images)
+they would like to add to the reports. If that is the case, please do an initial run
+and you will notice that inside `data/report_{report_year}_{member_flag}` a subfolder 
+`additional_files` will be created automatically. Please, add all additional files you
+would like to add to the reports inside it and work on the templates to include them 
+in the correct section on your report.
+
+### Local knowledge - artisanal trips 
+
+There are some additional data that are already being expected in the currerent workflow.
+This is the case of the *estimated average of monthly landings (trips) per landing sites 
+provided by members*. If available, this file will be used in the artisanal report when
+calculating the total number of trips to be used in the final artisanal ACE calculation.
+
+This workflow checks in the `data/report_{report_year}_{member_flag}/additional_files` 
+if member has any .csv file named: `est_trips.csv`.
+
+If you have this information in a csv file, please add it to the correct folder 
+(`data/report_{report_year}_{member_flag}/additional_files`) and save it as 
+`est_trips.csv`. The file should have only two columns and they should be named 
+as: `landing_site_name` and `est.trips`
+
 
 ### Part 1
 
@@ -105,7 +131,7 @@ figures and maps in the reports).
 | 3314 |  1 | • Seabird captures by species and area (`tbl-cmm2018-03z`) |
 | 2917 |  1 | • Striped marlin vessels and catch south of 15S (`tbl-cmm2006-04`) |
 | 3602 |  1 | • North Pacific albacore vessels, effort and catch (`tbl-cmm2019-03`) |
-| data/{member}/CMM2023_03.csv |  1 | • North Pacific swordfish vessels, effort and catch (`tbl-cmm2023-03`) |
+| 3513 |  1 | • North Pacific swordfish vessels, effort and catch (`tbl-cmm2023-03`) |
 
 
 

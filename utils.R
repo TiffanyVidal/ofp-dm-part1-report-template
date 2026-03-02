@@ -18,11 +18,11 @@ library("janitor")
 library("httr")
 
 ### Never change/update the values below:
-report_ids = c(2918, 2986, 3222, 2917, 3602, 3317, 3315, 3314, 3612, 3513,# addendum
+report_ids_list = c(2918, 2986, 3222, 2917, 3602, 3317, 3315, 3314, 3612, 3513, 3513, # addendum
                3615, 3527, 3614,                                          # artisanal
-               3605, 2953, 3608, 3619)                                    # Part1
+               3605, 2953, 3608)#, 3619)                                    # Part1
 
-report_ids_ikasavea = c("b1559368-b7a3-464e-883a-34fe3d2cd7c0") 
+report_ids_ikasavea_list = c("b1559368-b7a3-464e-883a-34fe3d2cd7c0") 
 
 # baseurl ikasavea
 baseurl_ika="https://www.spc.int/coastalfisheries/"
@@ -86,8 +86,8 @@ download_ikasavea_data <- function(country_code, report_ids, folder_path, r_year
     
     # Convert the data to a data frame for analysis
     if ("data" %in% names(response_data)) {
-      df_result <- bind_rows(response_data$data) |>
-        filter(Year == r_year)
+      df_result <- bind_rows(response_data$data) #|>
+        # filter(Year == r_year)
       
       cat(paste("IKASAVEA: Retrieved", nrow(df_result), "data records for report", report_id, "year ", r_year, "\n"))
       
@@ -194,8 +194,8 @@ load_token <- function(user_name, country_code){
 
 process_country_data <- function(country_code, 
                                  r_year, 
-                                 report_ids,
-                                 report_ids_ikasavea = c(),
+                                 report_ids = report_ids_list, 
+                                 report_ids_ikasavea = report_ids_ikasavea_list,
                                  rewrite_files = FALSE,
                                  user_name = Sys.getenv("USER_NAME"),
                                  overwrite = TRUE) {
@@ -239,8 +239,10 @@ process_country_data <- function(country_code,
     )
     
     if (length(report_ids_ikasavea) > 0 & !is.null(report_ids_ikasavea)){
-      download_ikasavea_data(country = country_code, report_ids = report_ids_ikasavea, 
-                             folder_path = this_yr_folder, r_year = r_year)  
+      download_ikasavea_data(country = country_code, 
+                             report_ids = report_ids_ikasavea, 
+                             folder_path = this_yr_folder, 
+                             r_year = r_year)  
     }
     
 
@@ -294,7 +296,7 @@ download_report_data <- function(token,
                                  overwrite = FALSE,
                                  save_folder = "data/"){
   
-  all_reports <- get_list_of_t2_reports( token, 
+  reports_selection <- get_list_of_t2_reports( token, 
                                          country_code, 
                                          user_name, 
                                          overwrite = overwrite,
@@ -302,8 +304,8 @@ download_report_data <- function(token,
                                          list_reports = filtered_reports)
   
   # select key reports
-  reports_selection <- all_reports |>
-    filter(user_report_id %in% report_ids)
+  # reports_selection <- all_reports |>
+  #   filter(user_report_id %in% report_ids)
   
   # download data
   report_data <- get_reports(
@@ -347,6 +349,8 @@ get_list_of_t2_reports <- function(token,
     "curl",
     args = c(
       "-X", "GET",
+      "--max-time", "2",        # timeout after 2 seconds
+
       "https://www.spc.int/ofp/tufman2api/api/ReportDefinition/AllSimple",
       "-H", "accept: application/json, text/plain, */*'",
       "-H", paste0("authorization: Bearer ", token),
