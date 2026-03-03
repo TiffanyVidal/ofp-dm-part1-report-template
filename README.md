@@ -31,7 +31,7 @@ Output reports are saved to the *reports/* folder. The diagram below summarises 
 
 3.  Ensure there's an empty line at the end of the `.env` file
 
-4.  **Important**: Never commit the `.env` file to version control. To ensure that is the case and `.env` files to your `.gitignore` file. These files types will be ignored when synced to the repo (it will only remain on your machine).
+4.  **Important**: Never commit the `.env` file to version control. To ensure that is the case and `.env` files to your `.gitignore` file. Files with the `.env` extension will be ignored when synced to the repo (it will only remain on your machine).
 
 5.  Open script `main.R` and make sure all packages are installed
 
